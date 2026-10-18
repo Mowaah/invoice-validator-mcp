@@ -20,6 +20,13 @@ Example (live, from the free demo endpoint):
 
 It is also **MCP-native with a free, keyless demo endpoint**, so an agent can try it in one config line. Single-ID validators are included too.
 
+## Try it free
+
+- **No key, right now:** point any MCP client at `https://invoice-validator.mohamed-bahaa53000.workers.dev/demo/mcp` (10 tool calls per IP per day).
+- **Free RapidAPI plan:** 100 requests/month on the [Basic plan](https://rapidapi.com/MohamedBahaa/api/invoice-payment-id-validator/pricing), no card needed. Pro is $10 for 10,000.
+- **Pay per call, no account (x402):** agents with a USDC wallet on Base can pay $0.01 per call at `https://invoice-validator.mohamed-bahaa53000.workers.dev/x402/v1/payee-check` (also `/x402/v1/iban`, `/bic`, `/vat/eu`, `/vat/gb`, `/ein`). `GET /x402` shows the terms; an unpaid call returns HTTP 402 with the payment requirements.
+- **Using n8n?** Get [AP invoice triage installed in your n8n for $149](https://mohabaha0.gumroad.com/l/n8n-setup), done for you.
+
 This is a **hosted (remote) MCP server** using Streamable HTTP. There is nothing to install or run locally, and this repository holds documentation and the MCP Registry manifest only. The server code is not open source.
 
 | Endpoint | Auth | Limits |
