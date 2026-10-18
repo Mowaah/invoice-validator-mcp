@@ -2,8 +2,8 @@
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "dev.workers.mohamed-bahaa53000.invoice-validator/invoice-payment-id-validator",
   "title": "Invoice & Payment ID Validator",
-  "description": "Check IBAN, BIC, EU VAT (live VIES), UK VAT, US EIN before an agent pays an invoice. Paid: RapidAPI",
-  "version": "1.1.2",
+  "description": "Pay/review/hold verdict for invoice payees: cross-checks IBAN, BIC, VAT, EIN. Paid: RapidAPI",
+  "version": "1.2.0",
   "websiteUrl": "https://rapidapi.com/MohamedBahaa/api/invoice-payment-id-validator",
   "remotes": [
     {
