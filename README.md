@@ -22,6 +22,8 @@ It is also **MCP-native with a free, keyless demo endpoint**, so an agent can tr
 
 ## Try it free
 
+- **In your browser, no code:** the [Free IBAN & VAT Checker](https://invoice-validator.mohamed-bahaa53000.workers.dev/tools/iban-vat-checker) shows valid + pay / review / hold for one IBAN or VAT number.
+- **Also free:** the [Free Bulk Email List Cleaner](https://email-scorer.mohamed-bahaa53000.workers.dev/tools/email-list-cleaner) (paste 25 emails, get keep / fix / review / drop).
 - **No key, right now:** point any MCP client at `https://invoice-validator.mohamed-bahaa53000.workers.dev/demo/mcp` (10 tool calls per IP per day).
 - **Free RapidAPI plan:** 100 requests/month on the [Basic plan](https://rapidapi.com/MohamedBahaa/api/invoice-payment-id-validator/pricing), no card needed. Pro is $10 for 10,000.
 - **Pay per call, no account (x402):** agents with a USDC wallet on Base can pay $0.01 per call at `https://invoice-validator.mohamed-bahaa53000.workers.dev/x402/v1/payee-check` (also `/x402/v1/iban`, `/bic`, `/vat/eu`, `/vat/gb`, `/ein`). `GET /x402` shows the terms; an unpaid call returns HTTP 402 with the payment requirements.
