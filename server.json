@@ -1,0 +1,32 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "dev.workers.mohamed-bahaa53000.invoice-validator/invoice-payment-id-validator",
+  "title": "Invoice & Payment ID Validator",
+  "description": "Check IBAN, BIC, EU VAT (live VIES), UK VAT, US EIN before an agent pays an invoice. Paid: RapidAPI",
+  "version": "1.1.2",
+  "websiteUrl": "https://rapidapi.com/MohamedBahaa/api/invoice-payment-id-validator",
+  "remotes": [
+    {
+      "type": "streamable-http",
+      "url": "https://invoice-validator.mohamed-bahaa53000.workers.dev/demo/mcp"
+    },
+    {
+      "type": "streamable-http",
+      "url": "https://invoice-payment-id-validator.p.rapidapi.com/mcp",
+      "headers": [
+        {
+          "name": "X-RapidAPI-Key",
+          "description": "Your RapidAPI key (free Basic plan)",
+          "isRequired": true,
+          "isSecret": true
+        },
+        {
+          "name": "X-RapidAPI-Host",
+          "description": "RapidAPI host",
+          "isRequired": true,
+          "value": "invoice-payment-id-validator.p.rapidapi.com"
+        }
+      ]
+    }
+  ]
+}
