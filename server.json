@@ -3,8 +3,12 @@
   "name": "dev.workers.mohamed-bahaa53000.invoice-validator/invoice-payment-id-validator",
   "title": "Invoice & Payment ID Validator",
   "description": "Pay/review/hold verdict for invoice payees: cross-checks IBAN, BIC, VAT, EIN. Paid: RapidAPI",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "websiteUrl": "https://rapidapi.com/MohamedBahaa/api/invoice-payment-id-validator",
+  "repository": {
+    "url": "https://github.com/Mowaah/invoice-validator-mcp",
+    "source": "github"
+  },
   "remotes": [
     {
       "type": "streamable-http",
