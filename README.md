@@ -97,3 +97,5 @@ For clients that only support stdio: `npx -y mcp-remote https://invoice-validato
 
 - Stateless. Inputs aren't stored beyond standard request logs.
 - Validation checks format and checksums (plus VIES when `live=true`). It doesn't prove an account belongs to a given company.
+- VIES has maintenance windows and per-country outages. When a live lookup fails you get `vies.checked=false` (and an info-level `vies_unavailable` flag in `check_invoice_payee`), never "invalid". Treat that as "not checked yet": keep the invoice on review and retry the lookup later (for example after 15 to 60 minutes) instead of rejecting it.
+- A valid IBAN can still belong to a fraudster. If a known vendor's bank details change, confirm the change by phoning them on a number you already had, not one printed on the new invoice.
