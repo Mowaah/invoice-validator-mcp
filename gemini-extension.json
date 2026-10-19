@@ -1,0 +1,8 @@
+{
+  "name": "invoice-validator",
+  "version": "1.0.0",
+  "description": "Pay/review/hold verdict for invoice payees: cross-checks IBAN, BIC, VAT and EIN against each other and the supplier country.",
+  "mcpServers": {
+    "invoice-validator": { "httpUrl": "https://invoice-validator.mohamed-bahaa53000.workers.dev/demo/mcp" }
+  }
+}
