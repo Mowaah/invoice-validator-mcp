@@ -1,0 +1,20 @@
+{
+  "name": "invoice-validator",
+  "displayName": "Invoice Payee Validator",
+  "version": "1.0.0",
+  "description": "Pay/review/hold verdict for invoice payees: cross-checks IBAN, BIC, VAT and EIN against each other and the supplier country.",
+  "author": {
+    "name": "Mohamed Zaghloul",
+    "email": "mohamed.bahaa5300@gmail.com"
+  },
+  "license": "MIT",
+  "keywords": [
+    "iban",
+    "vat",
+    "invoice",
+    "accounts-payable",
+    "mcp"
+  ],
+  "logo": "logo.png",
+  "mcpServers": ".mcp.json"
+}
