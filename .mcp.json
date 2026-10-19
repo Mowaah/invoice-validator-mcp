@@ -1,0 +1,7 @@
+{
+  "mcpServers": {
+    "invoice-validator": {
+      "url": "https://invoice-validator.mohamed-bahaa53000.workers.dev/demo/mcp"
+    }
+  }
+}
