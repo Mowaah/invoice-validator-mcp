@@ -1,6 +1,35 @@
 # Invoice & Payment ID Validator — remote MCP server
 
-**Ask one question before paying an invoice: pay, review, or hold?** `check_invoice_payee` takes whatever the invoice has (IBAN, BIC, VAT, EIN) plus the supplier's country, and returns a verdict with plain-English reasons.
+**For accounts-payable and finance teams: before you pay an invoice, get a pay, review or hold verdict on the supplier's bank and tax details.**
+
+**1. Connect** (free, no key; works in Claude Desktop, Cursor, Cline, VS Code and any client that supports remote Streamable HTTP):
+
+```json
+{
+  "mcpServers": {
+    "invoice-validator": {
+      "url": "https://invoice-validator.mohamed-bahaa53000.workers.dev/demo/mcp"
+    }
+  }
+}
+```
+
+**2. Ask:** *"Should I pay this Irish supplier's invoice? VAT IE6388047V, IBAN DE89370400440532013000, EUR."* Your agent calls:
+
+```json
+{"name":"check_invoice_payee","arguments":{"vat":"IE6388047V","iban":"DE89370400440532013000","supplier_country":"IE","currency":"EUR"}}
+```
+
+**3. Get** (real output from the free demo endpoint, trimmed):
+
+```json
+{"verdict":"hold","risk_score":45,
+ "summary":"Hold payment: Supplier is in IE but wants payment to a DE bank account: the classic changed-bank-details fraud pattern. Confirm by phone using a known number.",
+ "reasons":[{"code":"iban_country_differs_from_supplier","severity":"high"}],
+ "checks":{"iban":{"valid":true,"country":"DE","sepa":true},"vat":{"valid":true,"country":"IE"}}}
+```
+
+Both IDs are valid on their own. The mismatch between them is what triggers the hold.
 
 ## What makes it different
 
@@ -10,13 +39,6 @@ Most IBAN/VAT APIs check each number on its own: "this IBAN is well-formed". Tha
 - **BIC from a different country than the IBAN**: the two don't belong to the same account.
 - **VAT registered to someone else**: with `live=true`, the VIES-registered company name is compared with the supplier name.
 - **Unregistered VAT, test BICs, EUR invoices paid to non-SEPA accounts.**
-
-Example (live, from the free demo endpoint):
-
-```json
-{"verdict":"hold","risk_score":90,
- "summary":"Hold payment: BIC is from DE but the IBAN is from NL ...; Supplier is in DE but wants payment to a NL bank account: the classic changed-bank-details fraud pattern. Confirm by phone using a known number."}
-```
 
 It is also **MCP-native with a free, keyless demo endpoint**, so an agent can try it in one config line. Single-ID validators are included too.
 
