@@ -1,0 +1,512 @@
+{
+  "name": "Extract invoice data from Gmail PDFs with Gemini and log to Google Sheets",
+  "nodes": [
+    {
+      "parameters": {
+        "pollTimes": {
+          "item": [
+            {
+              "mode": "everyMinute"
+            }
+          ]
+        },
+        "simple": false,
+        "filters": {
+          "q": "has:attachment filename:pdf label:invoices",
+          "readStatus": "unread"
+        },
+        "options": {
+          "downloadAttachments": true,
+          "dataPropertyAttachmentsPrefixName": "attachment_"
+        }
+      },
+      "id": "59fe68d1-24ce-4d3f-9b14-90d68231cbe0",
+      "name": "Watch Inbox for Invoice PDFs",
+      "type": "n8n-nodes-base.gmailTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Fan out: one item per PDF attachment on each email.\nconst out = [];\n$input.all().forEach((item, idx) => {\n  const j = item.json;\n  const from = j.from?.value?.[0]?.address || j.from?.text || '';\n  for (const [key, file] of Object.entries(item.binary || {})) {\n    const name = (file.fileName || key).toLowerCase();\n    if (!(file.mimeType || '').includes('pdf') && !name.endsWith('.pdf')) continue;\n    out.push({\n      json: {\n        email_id: j.id,\n        email_subject: j.subject || '',\n        email_from: from,\n        email_date: j.date || '',\n        file_name: file.fileName || key,\n      },\n      binary: { data: file },\n      pairedItem: { item: idx },\n    });\n  }\n});\nreturn out;\n"
+      },
+      "id": "0aac7536-b51b-4769-ba5b-ad3e93f07225",
+      "name": "Split PDF Attachments",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        220,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "pdf",
+        "binaryPropertyName": "data",
+        "options": {}
+      },
+      "id": "ce493f87-1b60-43cb-85be-533f789ec0f9",
+      "name": "Extract PDF Text",
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1,
+      "position": [
+        440,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "57fe1318-b6ff-4e13-958e-79c9ade8993a",
+              "name": "text",
+              "value": "={{ ($json.text || '').slice(0, 30000) }}",
+              "type": "string"
+            },
+            {
+              "id": "4a49ca88-c507-48a6-8272-871a4f7c9ed2",
+              "name": "email_subject",
+              "value": "={{ $('Split PDF Attachments').item.json.email_subject }}",
+              "type": "string"
+            },
+            {
+              "id": "03276ae3-99f8-4abb-84b4-418056f54a8d",
+              "name": "email_from",
+              "value": "={{ $('Split PDF Attachments').item.json.email_from }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "c08a0f67-fbce-4b87-9a7d-866b6f2140d4",
+      "name": "Keep Email Context",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        660,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Email subject: {{ $json.email_subject }}\nSender: {{ $json.email_from }}\n\nInvoice text:\n{{ $json.text }}",
+        "hasOutputParser": true,
+        "messages": {
+          "messageValues": [
+            {
+              "message": "You are an accounts-payable clerk. Extract invoice data from the raw text of a PDF invoice. Return only values that appear in the text. Use ISO dates (YYYY-MM-DD). Amounts are plain numbers without currency symbols or thousands separators. If a field is missing use an empty string (or 0 for numbers). Lower your confidence when the text is garbled, totals do not add up, or key fields are missing. Payment and tax identifiers (IBAN, BIC/SWIFT, VAT number, EIN) must be the VENDOR's own, copied exactly as printed; never take the bill-to customer's numbers, and use an empty string when the invoice does not show one."
+            }
+          ]
+        }
+      },
+      "id": "df7b35d0-db7e-45ac-8a10-0a43b0b9bbdf",
+      "name": "Extract Invoice Fields (Gemini)",
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.5,
+      "position": [
+        880,
+        300
+      ],
+      "retryOnFail": true,
+      "maxTries": 5,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "modelName": "models/gemini-3.8-flash",
+        "options": {
+          "temperature": 0
+        }
+      },
+      "id": "9aeb0ac4-8a49-4e20-b112-01127284e266",
+      "name": "Gemini Chat Model",
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [
+        820,
+        520
+      ]
+    },
+    {
+      "parameters": {
+        "schemaType": "manual",
+        "inputSchema": "{\n  \"type\": \"object\",\n  \"properties\": {\n    \"vendor_name\": {\n      \"type\": \"string\",\n      \"description\": \"Legal name of the company that issued the invoice\"\n    },\n    \"vendor_email\": {\n      \"type\": \"string\",\n      \"description\": \"Billing email of the vendor, empty string if absent\"\n    },\n    \"vendor_iban\": {\n      \"type\": \"string\",\n      \"description\": \"IBAN of the vendor's bank account as printed on the invoice (remit-to / bank details), empty string if absent\"\n    },\n    \"vendor_vat_id\": {\n      \"type\": \"string\",\n      \"description\": \"The vendor's own VAT number including its 2-letter country prefix (e.g. DE811907980, GB980780684), empty string if absent. Never the customer's VAT number\"\n    },\n    \"invoice_number\": {\n      \"type\": \"string\"\n    },\n    \"po_number\": {\n      \"type\": \"string\",\n      \"description\": \"Purchase order number referenced on the invoice, empty string if none\"\n    },\n    \"invoice_date\": {\n      \"type\": \"string\",\n      \"description\": \"ISO 8601 date YYYY-MM-DD\"\n    },\n    \"due_date\": {\n      \"type\": \"string\",\n      \"description\": \"ISO 8601 date YYYY-MM-DD, empty string if not stated\"\n    },\n    \"currency\": {\n      \"type\": \"string\",\n      \"description\": \"ISO 4217 code, e.g. USD\"\n    },\n    \"subtotal\": {\n      \"type\": \"number\"\n    },\n    \"tax\": {\n      \"type\": \"number\"\n    },\n    \"total\": {\n      \"type\": \"number\",\n      \"description\": \"Total amount due\"\n    },\n    \"line_items\": {\n      \"type\": \"array\",\n      \"items\": {\n        \"type\": \"object\",\n        \"properties\": {\n          \"description\": {\n            \"type\": \"string\"\n          },\n          \"quantity\": {\n            \"type\": \"number\"\n          },\n          \"unit_price\": {\n            \"type\": \"number\"\n          },\n          \"amount\": {\n            \"type\": \"number\"\n          }\n        }\n      }\n    },\n    \"confidence\": {\n      \"type\": \"number\",\n      \"description\": \"0 to 1, your confidence that every field above is correct\"\n    }\n  },\n  \"required\": [\n    \"vendor_name\",\n    \"invoice_number\",\n    \"invoice_date\",\n    \"currency\",\n    \"total\",\n    \"confidence\"\n  ]\n}"
+      },
+      "id": "9089c8a2-55d4-4372-8c91-3b13ef4c8290",
+      "name": "Invoice JSON Schema",
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.2,
+      "position": [
+        1000,
+        520
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Clean the AI output into a flat, spreadsheet-safe row and flag anything a human should look at.\nconst src = $('Split PDF Attachments').item.json;\nconst o = $json.output || {};\nconst num = (v) => {\n  if (typeof v === 'number') return Math.round(v * 100) / 100;\n  const n = parseFloat(String(v ?? '').replace(/[^0-9.\\-]/g, ''));\n  return Number.isFinite(n) ? Math.round(n * 100) / 100 : 0;\n};\nconst isoDate = (v) => {\n  if (!v) return '';\n  const d = new Date(v);\n  return isNaN(d.getTime()) ? '' : d.toISOString().slice(0, 10);\n};\nconst clean = (s) => String(s ?? '').trim();\n\nlet minConfidence = 0.85, pro = false;\ntry { minConfidence = Number($('Config').first().json.minConfidence ?? 0.85); pro = true; } catch (e) { /* free version has no Config node */ }\n// Payment / tax IDs: keep letters and digits only, upper case (\"DE89 3704...\" -> \"DE893704...\"). Empty when absent.\nconst idClean = (s) => String(s ?? '').toUpperCase().replace(/[^A-Z0-9]/g, '');\nconst ein = String(o.vendor_ein ?? '').replace(/[^0-9]/g, '');\n\nconst subtotal = num(o.subtotal), tax = num(o.tax), total = num(o.total);\nconst lineItems = Array.isArray(o.line_items) ? o.line_items : [];\nconst confidence = Math.max(0, Math.min(1, Number(o.confidence) || 0));\n\nconst notes = [];\nif (!clean(o.invoice_number)) notes.push('Missing invoice number');\nif (!total) notes.push('Missing total');\nif (subtotal && Math.abs(subtotal + tax - total) > 0.02) notes.push(`Math mismatch: ${subtotal} + ${tax} != ${total}`);\nif (confidence < minConfidence) notes.push(`Low AI confidence (${confidence})`);\n\nreturn {\n  json: {\n    processed_at: new Date().toISOString(),\n    email_id: src.email_id,\n    email_from: src.email_from,\n    email_subject: src.email_subject,\n    file_name: src.file_name,\n    vendor_name: clean(o.vendor_name),\n    vendor_email: clean(o.vendor_email),\n    vendor_iban: idClean(o.vendor_iban),\n    ...(pro ? { vendor_bic: idClean(o.vendor_bic) } : {}),\n    vendor_vat_id: idClean(o.vendor_vat_id),\n    ...(pro ? { vendor_ein: ein.length === 9 ? `${ein.slice(0, 2)}-${ein.slice(2)}` : ein } : {}),\n    invoice_number: clean(o.invoice_number),\n    po_number: clean(o.po_number),\n    invoice_date: isoDate(o.invoice_date),\n    due_date: isoDate(o.due_date),\n    currency: (clean(o.currency) || 'USD').toUpperCase().slice(0, 3),\n    subtotal,\n    tax,\n    total,\n    line_count: lineItems.length,\n    line_items_json: JSON.stringify(lineItems),\n    confidence,\n    status: notes.length ? 'needs_review' : 'extracted',\n    review_notes: notes.join('; '),\n  },\n};\n",
+        "mode": "runOnceForEachItem"
+      },
+      "id": "cf2ebb79-5b80-4009-a636-38b0bbfda6ba",
+      "name": "Normalize Invoice",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1140,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "b51c7ed2-df2f-4652-ab35-70e0964b2f1f",
+              "leftValue": "={{ !!($json.vendor_iban || $json.vendor_vat_id) }}",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "374a046c-1c1c-4674-aeca-1f366d95b836",
+      "name": "Has Vendor ID?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1380,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "url": "={{ 'https://invoice-validator.mohamed-bahaa53000.workers.dev/demo/v1/' + ($json.vendor_iban ? 'iban' : String($json.vendor_vat_id).startsWith('GB') ? 'vat/gb' : 'vat/eu') }}",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "value",
+              "value": "={{ $json.vendor_iban || $json.vendor_vat_id }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "id": "ae041a46-bc58-4afd-b243-187157ee9a6d",
+      "name": "Check Vendor ID (Free Demo API)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1600,
+        180
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Free: add the Invoice & Payment ID Validator demo result (IBAN, else EU VAT) to the invoice row.\n// The demo endpoint needs no key but allows 10 calls per day per IP: a 429, an outage or an odd answer is\n// recorded as \"skipped\" and never stops the run.\nconst inv = $('Normalize Invoice').item.json;\nconst r = $json;\nconst checked = inv.vendor_iban ? `IBAN ${inv.vendor_iban}` : inv.vendor_vat_id ? `VAT ${inv.vendor_vat_id}` : '';\nlet id_check = 'no_id', id_check_details = '';\nif (!checked) {\n  id_check = 'no_id';\n} else if (r.invoice_number !== undefined) {\n  id_check = 'skipped'; id_check_details = 'not checked';\n} else if (r.error) {\n  const msg = typeof r.error === 'string' ? r.error : (r.error.message || r.error.description || JSON.stringify(r.error));\n  const capped = /429|demo_daily_limit|too many/i.test(`${msg} ${JSON.stringify(r.error).slice(0, 400)}`);\n  id_check = 'skipped';\n  id_check_details = capped ? 'demo limit reached (10 calls/day); a free RapidAPI key removes it' : `validator unavailable: ${String(msg).slice(0, 200)}`;\n} else if (typeof r.valid === 'boolean') {\n  id_check = r.valid ? 'valid' : 'invalid';\n  id_check_details = r.valid\n    ? `${checked}: valid${r.country ? ` (${r.country})` : ''}`\n    : `${checked}: INVALID (${(r.errors || []).join(', ') || 'failed check'})`;\n} else {\n  id_check = 'skipped'; id_check_details = 'no result from validator';\n}\nconst notes = [inv.review_notes, id_check === 'invalid' ? `Invalid vendor ${checked.split(' ')[0]}` : ''].filter(Boolean).join('; ');\nreturn { json: { ...inv, id_check, id_check_details,\n  status: id_check === 'invalid' ? 'needs_review' : inv.status, review_notes: notes } };\n",
+        "mode": "runOnceForEachItem"
+      },
+      "id": "00cc2066-edde-42ff-bcf9-a628da7f1b7e",
+      "name": "Add ID Check Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1840,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "REPLACE_WITH_YOUR_SPREADSHEET_ID"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "Invoices"
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "value": {},
+          "matchingColumns": [],
+          "schema": []
+        },
+        "options": {}
+      },
+      "id": "f85da7f9-1fdb-4907-85fc-3cfdb2e63438",
+      "name": "Log Invoice to Google Sheets",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        2080,
+        300
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 3000
+    },
+    {
+      "parameters": {
+        "operation": "markAsRead",
+        "messageId": "={{ $('Normalize Invoice').item.json.email_id }}"
+      },
+      "id": "cbdfe9e9-7007-40ca-a397-3124e7aa7d45",
+      "name": "Mark Email as Read",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        2300,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## Extract invoice data from Gmail PDFs with Gemini and log to Google Sheets\n\n### Who it's for\nBookkeepers, finance ops and small-business owners who still retype vendor invoices from email into a spreadsheet.\n\n### How it works\n1. **Gmail Trigger** polls for unread emails labelled `invoices` that carry a PDF.\n2. **Split PDF Attachments** turns every PDF on the email into its own item, so multi-invoice emails work.\n3. **Extract PDF Text** reads the PDF's text layer.\n4. **Gemini + Structured Output Parser** returns vendor, vendor IBAN and VAT number, invoice #, PO #, dates, currency, subtotal, tax, total, line items and a confidence score as strict JSON.\n5. **Normalize Invoice** cleans numbers and dates, checks that subtotal + tax = total, and flags low-confidence rows as `needs_review`.\n6. **Check Vendor ID** validates the vendor's IBAN (or VAT number) with the free demo of the Invoice & Payment ID Validator API (no key, 10 checks a day; if the limit is hit the row just says `skipped`). An invalid ID marks the row `needs_review`.\n7. The row is appended to **Google Sheets** and the email is marked as read so it is never processed twice.\n\n### Set up (about 10 minutes)\n1. Create a Gmail label `invoices` and a filter that applies it to vendor bills.\n2. Make a Google Sheet with a tab named `Invoices` (row 1 headers are created on the first run). Paste its ID into **Log Invoice to Google Sheets**.\n3. Add credentials: Gmail OAuth2, Google Sheets OAuth2, Google Gemini (free API key from Google AI Studio).\n4. Send yourself a sample invoice and activate.\n\n### Requirements\nn8n (tested on 2.43), Gmail, Google Sheets, a Gemini API key. Scanned image-only PDFs need OCR first.\n\n### Customize\nEdit the JSON schema to capture extra fields (cost centre, GL code), or change the Gmail search query. For more than 10 ID checks a day, subscribe to the Invoice & Payment ID Validator on RapidAPI (free Basic tier) and follow the green note.\n\nNeed duplicate-invoice and PO-mismatch checks, Slack approve/reject buttons, QuickBooks bill creation, error alerts and overdue reminders? The Pro version adds all of it: https://mohabaha0.gumroad.com/l/pkhjip",
+        "height": 860,
+        "width": 500
+      },
+      "id": "45dd9e86-9518-489d-8530-dd376ec79671",
+      "name": "Sticky Note 1",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -560,
+        -40
+      ]
+    },
+    {
+      "parameters": {
+        "content": "### 1. Catch the invoice\nPolls Gmail every minute for unread mail labelled `invoices` with a PDF, then fans out one item per PDF.",
+        "height": 340,
+        "width": 480,
+        "color": 7
+      },
+      "id": "b05408be-8701-4561-884e-de7fea8857c0",
+      "name": "Sticky Note 2",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -40,
+        160
+      ]
+    },
+    {
+      "parameters": {
+        "content": "### 2. Read and understand it\nPulls the PDF text layer and asks Gemini for strict JSON that matches the schema. Temperature 0, 3 retries on rate limits.",
+        "height": 480,
+        "width": 700,
+        "color": 7
+      },
+      "id": "d2852893-d8fa-4bbb-804f-4fb325d4f186",
+      "name": "Sticky Note 3",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        460,
+        160
+      ]
+    },
+    {
+      "parameters": {
+        "content": "### 3. Check the vendor's IBAN / VAT (free demo API)\nIf Gemini found a vendor IBAN (or VAT number), **Check Vendor ID** validates it with the Invoice & Payment ID Validator's keyless **demo endpoint**: no key needed, **10 calls per day per IP**. Invoices without an ID skip the call. A 429 (limit reached) or an outage is stored as `skipped` and the run carries on; an invalid ID marks the row `needs_review`.\n\nTo check every invoice, subscribe on RapidAPI (free Basic tier with a monthly quota, paid plans for volume). Then point the URL at `https://invoice-payment-id-validator.p.rapidapi.com/v1/iban` (or `/v1/vat/eu`), add a Header Auth credential (`X-RapidAPI-Key`) and an `X-RapidAPI-Host: invoice-payment-id-validator.p.rapidapi.com` header: https://rapidapi.com/MohamedBahaa/api/invoice-payment-id-validator",
+        "height": 620,
+        "width": 720,
+        "color": 4
+      },
+      "id": "d55ab540-4d08-49e9-9928-a5f8c2c31c57",
+      "name": "Sticky Note 4",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        1320,
+        -120
+      ]
+    },
+    {
+      "parameters": {
+        "content": "### 4. Log & close out\nNormalize Invoice validated the math and flagged low-confidence rows. The row (with the ID check result) is appended to Sheets and the email is marked read.",
+        "height": 340,
+        "width": 520,
+        "color": 7
+      },
+      "id": "ecfe9dc8-69c4-47c6-a0db-be916be50a20",
+      "name": "Sticky Note 5",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        2060,
+        160
+      ]
+    }
+  ],
+  "connections": {
+    "Watch Inbox for Invoice PDFs": {
+      "main": [
+        [
+          {
+            "node": "Split PDF Attachments",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split PDF Attachments": {
+      "main": [
+        [
+          {
+            "node": "Extract PDF Text",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract PDF Text": {
+      "main": [
+        [
+          {
+            "node": "Keep Email Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Keep Email Context": {
+      "main": [
+        [
+          {
+            "node": "Extract Invoice Fields (Gemini)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gemini Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Extract Invoice Fields (Gemini)",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Invoice JSON Schema": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "Extract Invoice Fields (Gemini)",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Invoice Fields (Gemini)": {
+      "main": [
+        [
+          {
+            "node": "Normalize Invoice",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Invoice": {
+      "main": [
+        [
+          {
+            "node": "Has Vendor ID?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Vendor ID?": {
+      "main": [
+        [
+          {
+            "node": "Check Vendor ID (Free Demo API)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Add ID Check Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Vendor ID (Free Demo API)": {
+      "main": [
+        [
+          {
+            "node": "Add ID Check Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Add ID Check Result": {
+      "main": [
+        [
+          {
+            "node": "Log Invoice to Google Sheets",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log Invoice to Google Sheets": {
+      "main": [
+        [
+          {
+            "node": "Mark Email as Read",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "meta": {
+    "templateCredsSetupCompleted": false
+  }
+}
